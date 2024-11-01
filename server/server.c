@@ -13,6 +13,7 @@
 #define PORT 6675
 #define BUFSIZE 1024
 #define BACKLOG 5
+#define MAX_CLIENTS 64
 
 void err_n_die(char *msg) {
     perror(msg);
@@ -20,23 +21,30 @@ void err_n_die(char *msg) {
 }
 
 void * handle_client(void *arg) {
-    printf("client has connected\n");
     int *fd = (int *) arg;
-    write(*fd, "hello world", sizeof("hello world"));
-    close(*fd);
-    return NULL;
+    char buffer[BUFSIZE];
 
+    recv(*fd, buffer, BUFSIZE, 0);
+    printf("%s joined\n", buffer);
+    while (true) {
+        close(*fd);
+        break;
+    }
+    return NULL;
 }
 
 int main(int argc, char **argv) {
     char address[64];
     if (argc < 2) {
-        strcat(address, FALLBACK_ADDRESS);
+        strcpy(address, FALLBACK_ADDRESS);
     } else {
         strcpy(address, argv[1]);
     }
 
     int server_fd, client_fd;
+
+    int clients[MAX_CLIENTS]; // list of client file descriptors
+
     struct sockaddr_in server_addr, client_addr;
     socklen_t server_len = sizeof(server_addr);
     socklen_t client_len = sizeof(client_addr);
@@ -59,7 +67,7 @@ int main(int argc, char **argv) {
     if (listen(server_fd, BACKLOG) < 0)
         err_n_die("listen");
     
-    printf("listening on %s\n", address);
+    printf("listening: %s\n", address);
     
     while (true) {
         client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_len);
@@ -67,6 +75,11 @@ int main(int argc, char **argv) {
             perror("accept");
             continue;
         }
+        
+        char client_ip_name[64];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip_name, INET_ADDRSTRLEN);
+        printf("established connection with: %s:%d\n", client_ip_name, ntohs(client_addr.sin_port));
+
         pthread_t client_thread;
         if (pthread_create(&client_thread, NULL, handle_client, &client_fd) != 0)
             err_n_die("pthread_create");
